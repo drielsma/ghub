@@ -231,10 +231,7 @@ by `ghub--username' and a host based on `ghub-base-url'.  When
   (or ghub-token
       (let ((secret (plist-get (car (auth-source-search
                                      :max 1
-                                     :user (let ((user (ghub--username)))
-                                             (if ghub-package
-                                                 (concat user ":" ghub-package)
-                                               user))
+                                     :user (ghub--username)
                                      :host (ghub--hostname)))
                                :secret)))
         (or (if (functionp secret)
@@ -246,15 +243,18 @@ by `ghub--username' and a host based on `ghub-base-url'.  When
   "Return the configured username.
 For Github.com get the value of the Git variable `github.user'.
 For Github enterprise instances, get the value of the Git
-variable `github.HOST.user'."
-  (or ghub-username
-      (let ((var (if (string-equal ghub-base-url "https://api.github.com")
-                     "github.user"
-                   (format "github.%s.user" (ghub--hostname)))))
-        (condition-case nil
-            (car (process-lines "git" "config" var))
-          (error
-           (signal 'ghub-auth-error (list (format "%s is undefined" var))))))))
+variable `github.HOST.user'.  When `ghub-package' is non-nil,
+then return (concat USERNAME \":\" PACKAGE)."
+  (concat
+   (or ghub-username
+       (let ((var (if (string-equal ghub-base-url "https://api.github.com")
+                      "github.user"
+                    (format "github.%s.user" (ghub--hostname)))))
+         (condition-case nil
+             (car (process-lines "git" "config" var))
+           (error
+            (signal 'ghub-auth-error (list (format "%s is undefined" var)))))))
+   (and ghub-package (concat ":" ghub-package))))
 
 (defun ghub-wait (resource)
   "Busy-wait until RESOURCE becomes available."

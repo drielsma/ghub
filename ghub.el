@@ -240,11 +240,13 @@ in which case return nil."
     (url-basic-auth url t)))
 
 (defun ghub--token (url)
-  (let ((secret (plist-get (car (auth-source-search
-                                 :max 1
-                                 :user (ghub--username url)
-                                 :host (ghub--hostname url)))
-                           :secret)))
+  (let* ((hostname (ghub--hostname url))
+         (username (ghub--username url hostname))
+         (secret (plist-get (car (auth-source-search
+                                  :max 1
+                                  :user hostname
+                                  :host username))
+                            :secret)))
     (or (if (functionp secret)
             (funcall secret)
           secret)
@@ -256,10 +258,10 @@ in which case return nil."
         (match-string 1 url)
       (signal 'ghub-auth-error (list (format "Invalid url %s" url))))))
 
-(defun ghub--username (url)
+(defun ghub--username (url &optional hostname)
   (let ((var (if (string-prefix-p "https://api.github.com" url)
                  "github.user"
-               (format "github.%s.user" (ghub--hostname url)))))
+               (format "github.%s.user" (or hostname (ghub--hostname url))))))
     (condition-case nil
         (car (process-lines "git" "config" var))
       (error

@@ -231,7 +231,7 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
      (concat "token "
              (if (stringp auth)
                  auth
-               (ghub--token url))))
+               (ghub--token url (and (symbolp auth) auth)))))
    'utf-8))
 
 (defun ghub--basic-auth (url)
@@ -240,13 +240,15 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
           (ghub--username url))
     (url-basic-auth url t)))
 
-(defun ghub--token (url)
+(defun ghub--token (url &optional package)
   (let* ((hostname (ghub--hostname url))
          (username (ghub--username url hostname))
          (secret (plist-get (car (auth-source-search
                                   :max 1
-                                  :user hostname
-                                  :host username))
+                                  :user (if package
+                                            (format "%s:%s" package username)
+                                          username)
+                                  :host hostname))
                             :secret)))
     (or (if (functionp secret)
             (funcall secret)

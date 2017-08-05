@@ -90,6 +90,7 @@
 
 (defvar url-http-end-of-headers)
 (defvar url-http-response-status)
+(defvar ghub--token-scopes)
 
 (defconst ghub-base-url "https://api.github.com")
 
@@ -253,6 +254,7 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
     (or (if (functionp secret)
             (funcall secret)
           secret)
+        ;; TODO (ghub-create-token url package)
         (signal 'ghub-auth-error '("Token not found")))))
 
 (defun ghub--hostname (url)
@@ -284,6 +286,107 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
                                 resource))))
         (message "Waiting for %s (%ss)..." resource total)
         (sit-for for)))))
+
+(defun ghub-create-token (url package scopes &optional note)
+  "Create and save a new token for PACKAGE with access to SCOPES.
+If PACKAGE is nil, then create a token that can be shared by
+multiple Emacs packages.  Optional NOTE specifies a note saved
+for the token; if it is nil, then \"Emacs package PACKAGE\" is
+used, or if PACKAGE is nil, then \"Emacs library ghub.el\"."
+  (interactive
+   (let ((pkg (read-string
+               "Create new token for package (default: generic token): ")))
+     (when (equal pkg "")
+       (setq pkg nil))
+     (list pkg
+           (completing-read-multiple "Token scopes: " ghub--token-scopes)
+           (read-string "Token description: "
+                        (if pkg
+                            (concat "Emacs package " pkg)
+                          "Emacs library ghub.el")))))
+  (let ((token
+         (cdr (assq 'token
+                    (ghub-post
+                     "/authorizations" nil
+                     `((scopes . ,scopes)
+                       (note . ,(cond (note)
+                                      (package
+                                       (concat "Emacs package " package))
+                                      (t
+                                       "Emacs library ghub.el"))))))))
+        (file (convert-standard-filename "~/.authinfo.gpg")))
+    (with-current-buffer (find-file-noselect file)
+      (let* ((host (ghub--hostname url))
+             (user (ghub--username url))
+             (key  (format "machine %s login %s password " host user)))
+        (goto-char (point-min))
+        (cond ((re-search-forward (concat "^" (regexp-quote key)) nil t)
+               (kill-line)
+               (insert token))
+              (t
+               (goto-char (point-max))
+               (insert key token "\n"))))
+      (save-buffer)
+      (kill-buffer))
+    ;; (auth-source-forget+ '(:host host :user user))
+    token))
+
+(defconst ghub--token-scopes
+  '((user             . "\
+Grants read/write access to profile info only. \
+Note that this scope includes `user:email' and `user:follow'.")
+    (user:email       . "Grants read access to a user's email addresses.")
+    (user:follow      . "Grants access to follow or unfollow other users.")
+    (public_repo      . "\
+Grants read/write access to code, commit statuses, collaborators, \
+and deployment statuses for public repositories and organizations. \
+Also required for starring public repositories.")
+    (repo             . "\
+Grants read/write access to code, commit statuses, invitations, \
+collaborators, adding team memberships, and deployment statuses \
+for public and private repositories and organizations.")
+    (repo_deployment  . "\
+Grants access to deployment statuses for public and private repositories. \
+This scope is only necessary to grant other users or services access to \
+deployment statuses, without granting access to the code.")
+    (repo:status      . "\
+Grants read/write access to public and private repository commit statuses. \
+This scope is only necessary to grant other users or services access to \
+private repository commit statuses without granting access to the code.")
+    (delete_repo      . "\
+Grants access to delete adminable repositories.")
+    (notifications    . "\
+Grants read access to a user's notifications. \
+`repo' also provides this access.")
+    (gist             . "\
+Grants write access to gists.")
+    (read:repo_hook   . "\
+Grants read and ping access to hooks in public or private repositories.")
+    (write:repo_hook  . "\
+Grants read, write, and ping access to hooks \
+in public or private repositories.")
+    (admin:repo_hook  . "\
+Grants read, write, ping, and delete access \
+to hooks in public or private repositories.")
+    (admin:org_hook   . "\
+Grants read, write, ping, and delete access to organization hooks. \
+Note: OAuth tokens will only be able to perform these actions on \
+organization hooks which were created by the OAuth App. \
+Personal access tokens will only be able to perform these actions \
+on organization hooks created by a user.")
+    (read:org         . "\
+Read-only access to organization, teams, and membership.")
+    (write:org        . "Publicize and unpublicize organization membership.")
+    (admin:org        . "Fully manage organization, teams, and memberships.")
+    (read:public_key  . "List and view details for public keys.")
+    (write:public_key . "Create, list, and view details for public keys.")
+    (admin:public_key . "Fully manage public keys.")
+    (read:gpg_key     . "List and view details for GPG keys.")
+    (write:gpg_key    . "Create, list, and view details for GPG keys.")
+    (admin:gpg_key    . "Fully manage GPG keys."))
+  "Last updated on 2017-07-02 from source:
+https://developer.github.com/apps/building-integrations/\
+setting-up-and-registering-oauth-apps/about-scopes-for-oauth-apps/")
 
 ;;; ghub.el ends soon
 (provide 'ghub)

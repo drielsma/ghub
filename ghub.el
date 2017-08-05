@@ -160,7 +160,7 @@ in which case return nil."
         (let ((url-request-extra-headers
                `(("Content-Type"  . "application/json")
                  ,@(and ghub-authenticate
-                        (list (cons "Authorization" (ghub--auth ghub-authenticate))))
+                        (list (cons "Authorization" (ghub--auth url ghub-authenticate))))
                  ,@ghub-extra-headers))
               (url-request-method method)
               (url-request-data d))
@@ -225,41 +225,41 @@ in which case return nil."
                        (url-hexify-string (cdr param))))
              params "&"))
 
-(defun ghub--auth (auth)
+(defun ghub--auth (url auth)
   (encode-coding-string
    (if (eq auth 'basic)
-       (ghub--basic-auth)
+       (ghub--basic-auth url)
      (concat "token "
-             (ghub--token)))
+             (ghub--token url)))
    'utf-8))
 
-(defun ghub--basic-auth ()
-  (let ((url (url-generic-parse-url ghub-base-url)))
+(defun ghub--basic-auth (url)
+  (let ((url (url-generic-parse-url url)))
     (setf (url-user url)
-          (ghub--username))
+          (ghub--username url))
     (url-basic-auth url t)))
 
-(defun ghub--token ()
+(defun ghub--token (url)
   (let ((secret (plist-get (car (auth-source-search
                                  :max 1
-                                 :user (ghub--username)
-                                 :host (ghub--hostname)))
+                                 :user (ghub--username url)
+                                 :host (ghub--hostname url)))
                            :secret)))
     (or (if (functionp secret)
             (funcall secret)
           secret)
         (signal 'ghub-auth-error '("Token not found")))))
 
-(defun ghub--hostname ()
+(defun ghub--hostname (url)
   (save-match-data
-    (if (string-match "\\`https?://\\([^/]+\\)" ghub-base-url)
-        (match-string 1 ghub-base-url)
-      (signal 'ghub-auth-error '("Invalid value for ghub-base-url")))))
+    (if (string-match "\\`https?://\\([^/]+\\)" url)
+        (match-string 1 url)
+      (signal 'ghub-auth-error (list (format "Invalid url %s" url))))))
 
-(defun ghub--username ()
-  (let ((var (if (string-equal ghub-base-url "https://api.github.com")
+(defun ghub--username (url)
+  (let ((var (if (string-prefix-p "https://api.github.com" url)
                  "github.user"
-               (format "github.%s.user" (ghub--hostname)))))
+               (format "github.%s.user" (ghub--hostname url)))))
     (condition-case nil
         (car (process-lines "git" "config" var))
       (error

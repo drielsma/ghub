@@ -46,8 +46,6 @@
 
 (defvar ghub-base-url "https://api.github.com")
 (defvar ghub-authenticate t)
-(defvar ghub-token nil)
-(defvar ghub-username nil)
 (defvar ghub-unpaginate nil)
 (defvar ghub-extra-headers nil)
 (defvar ghub-read-response-function 'ghub--read-json-response)
@@ -211,16 +209,15 @@ optional NOERROR is non-nil, in which case return nil."
     (url-basic-auth url t)))
 
 (defun ghub--token ()
-  (or ghub-token
-      (let ((secret (plist-get (car (auth-source-search
-                                     :max 1
-                                     :user (ghub--username)
-                                     :host (ghub--hostname)))
-                               :secret)))
-        (or (if (functionp secret)
-                (funcall secret)
-              secret)
-            (signal 'ghub-auth-error '("Token not found"))))))
+  (let ((secret (plist-get (car (auth-source-search
+                                 :max 1
+                                 :user (ghub--username)
+                                 :host (ghub--hostname)))
+                           :secret)))
+    (or (if (functionp secret)
+            (funcall secret)
+          secret)
+        (signal 'ghub-auth-error '("Token not found")))))
 
 (defun ghub--hostname ()
   (save-match-data
@@ -229,14 +226,13 @@ optional NOERROR is non-nil, in which case return nil."
       (signal 'ghub-auth-error '("Invalid value for ghub-base-url")))))
 
 (defun ghub--username ()
-  (or ghub-username
-      (let ((var (if (string-equal ghub-base-url "https://api.github.com")
-                     "github.user"
-                   (format "github.%s.user" (ghub--hostname)))))
-        (condition-case nil
-            (car (process-lines "git" "config" var))
-          (error
-           (signal 'ghub-auth-error (list (format "%s is undefined" var))))))))
+  (let ((var (if (string-equal ghub-base-url "https://api.github.com")
+                 "github.user"
+               (format "github.%s.user" (ghub--hostname)))))
+    (condition-case nil
+        (car (process-lines "git" "config" var))
+      (error
+       (signal 'ghub-auth-error (list (format "%s is undefined" var)))))))
 
 ;;; ghub.el ends soon
 (provide 'ghub)

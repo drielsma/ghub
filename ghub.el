@@ -205,7 +205,7 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
      (concat "token "
              (if (stringp auth)
                  auth
-               (ghub--token url username))))
+               (ghub--token url username (and (symbolp auth) auth)))))
    'utf-8))
 
 (defun ghub--basic-auth (url)
@@ -214,9 +214,10 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
           (ghub--username url))
     (url-basic-auth url t)))
 
-(defun ghub--token (url username)
+(defun ghub--token (url username package)
   (let* ((host (ghub--hostname url))
-         (user (or username (ghub--username url host))))
+         (user (ghub--ident (or username (ghub--username url host))
+                            package)))
     (or (ghub--auth-source-get :secret :host host :user user)
         (signal 'ghub-auth-error '("Token not found")))))
 
@@ -234,6 +235,11 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
         (car (process-lines "git" "config" var))
       (error
        (signal 'ghub-auth-error (list (format "%s is undefined" var)))))))
+
+(defun ghub--ident (username package)
+  (if (memq package '(nil ghub))
+      username
+    (format "%s^{%s}" username package)))
 
 (defun ghub--auth-source-get (key/s &rest spec)
   (declare (indent 1))

@@ -46,6 +46,8 @@
 ;;; Request
 ;;;; API
 
+(defvar ghub-github-token-scopes '(repo))
+
 (defvar ghub-response-headers nil)
 
 (defun ghub-get (resource &optional params data headers unpaginate
@@ -196,6 +198,29 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
              params "&"))
 
 ;;; Authentication
+;;;; API
+
+(defun ghub-create-token (url package username scopes)
+  (interactive) ; TODO
+  (let ((host (ghub--hostname url))
+        (user (ghub--ident package username)))
+    (cl-destructuring-bind (save token)
+        (ghub--auth-source-get (list :save-function :secret)
+          :create t :host host :user user
+          :secret
+          (cdr (assq 'token
+                     (ghub-post
+                      "/authorizations" nil
+                      `((scopes . ,scopes)
+                        (note   . ,(format "Emacs package %s" package)))
+                      nil nil nil nil username 'none))))
+      (funcall save)
+      ;; If the Auth-Source cache contains the information that there
+      ;; is no value, then setting the value does not invalidate that
+      ;; now incorrect information.
+      (auth-source-forget (list :host host :user user))
+      token)))
+
 ;;;; Internal
 
 (defun ghub--auth (url username auth)
@@ -219,7 +244,13 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
          (user (ghub--ident (or username (ghub--username url host))
                             package)))
     (or (ghub--auth-source-get :secret :host host :user user)
-        (signal 'ghub-auth-error '("Token not found")))))
+        (progn
+          ;; Auth-Source caches the information that there is no
+          ;; value, but in our case that is a situation that needs
+          ;; fixing so we want to keep trying by invalidating that
+          ;; information.
+          (auth-source-forget (list :host host :user user))
+          (ghub--confirm-create-token url package username)))))
 
 (defun ghub--hostname (url)
   (save-match-data
@@ -240,6 +271,55 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
   (if (memq package '(nil ghub))
       username
     (format "%s^{%s}" username package)))
+
+(defun ghub--package-scopes (package)
+  (symbol-value (intern (format "%s-github-token-scopes" package))))
+
+(defconst ghub--confirm-create-token
+  "missing token
+
+%s is trying to make a Github API request, but the
+necessary token matching the following criteria does not exist:
+
+  Url:     %s
+  User:    %s
+  Package: %s
+
+You may now create this token using the scopes listed below
+and storing it according to option `auth-sources'.
+
+Requested scopes:
+%s
+
+If you have not customized the option `auth-sources', then the
+token will be stored unencrypted in \"~/.authinfo\".  If that
+is the case, then consider to abort so that you can add this
+line to your init file and evaluate it for the current session:
+
+  (setq auth-sources (list \"~/.authinfo.gpg\"))
+
+Please type \"yes\" to create the token and continue,
+    or type \"no\" to abort.
+
+If you abort now but later want grant the requested permissions,
+then you can do that by simply invoke the same action again that
+resulted in this message being shown.
+
+If you only want to grant some of the requested permissions,
+then use `M-x ghub-create-token' and provide the appropriate
+url, user, package, and scopes when prompted.")
+
+(defun ghub--confirm-create-token (url package username)
+  (let ((scopes (ghub--package-scopes package)))
+    (display-warning
+     'ghub
+     (format ghub--confirm-create-token
+             package url username package
+             (let ((scopes (ghub--package-scopes package)))
+               (mapconcat (lambda (scope) (format "  %s" scope)) scopes "\n"))))
+    (if (yes-or-no-p "Create token using these scopes? ")
+        (ghub-create-token url package username scopes)
+      (user-error "Abort"))))
 
 (defun ghub--auth-source-get (key/s &rest spec)
   (declare (indent 1))

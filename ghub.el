@@ -213,16 +213,9 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
     (url-basic-auth url t)))
 
 (defun ghub--token (url username)
-  (let* ((hostname (ghub--hostname url))
-         (username (or username (ghub--username url hostname)))
-         (secret (plist-get (car (auth-source-search
-                                  :max 1
-                                  :user hostname
-                                  :host username))
-                            :secret)))
-    (or (if (functionp secret)
-            (funcall secret)
-          secret)
+  (let* ((host (ghub--hostname url))
+         (user (or username (ghub--username url host))))
+    (or (ghub--auth-source-get :secret :host host :user user)
         (signal 'ghub-auth-error '("Token not found")))))
 
 (defun ghub--hostname (url)
@@ -239,6 +232,17 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
         (car (process-lines "git" "config" var))
       (error
        (signal 'ghub-auth-error (list (format "%s is undefined" var)))))))
+
+(defun ghub--auth-source-get (key/s &rest spec)
+  (declare (indent 1))
+  (let* ((plist  (car (apply #'auth-source-search spec)))
+         (values (mapcar (lambda (key)
+                           (let ((value (plist-get plist key)))
+                             (if (functionp value)
+                                 (funcall value)
+                               value)))
+                         (if (listp key/s) key/s (list key/s)))))
+    (if (listp key/s) values (car values))))
 
 ;;; ghub.el ends soon
 (provide 'ghub)

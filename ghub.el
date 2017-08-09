@@ -203,7 +203,9 @@ Like calling `ghub-request' (which see) with \"DELETE\" as METHOD."
    (if (eq auth 'basic)
        (ghub--basic-auth url)
      (concat "token "
-             (ghub--token url username)))
+             (if (stringp auth)
+                 auth
+               (ghub--token url username))))
    'utf-8))
 
 (defun ghub--basic-auth (url)

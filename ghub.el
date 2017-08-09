@@ -103,7 +103,10 @@ optional NOERROR is non-nil, in which case return nil."
 (defun ghub-request (method resource &optional params data noerror)
   "Make a request for RESOURCE using METHOD."
   (let ((p (and params (concat "?" (ghub--url-encode-params params))))
-        (d (and data   (encode-coding-string (json-encode-list data) 'utf-8))))
+        (d (and data   (encode-coding-string (json-encode-list data) 'utf-8)))
+        (url (if (string-prefix-p "https://" resource)
+                 resource
+               (concat ghub-base-url resource))))
     (with-current-buffer
         (let ((url-request-extra-headers
                `(("Content-Type"  . "application/json")
@@ -117,7 +120,7 @@ optional NOERROR is non-nil, in which case return nil."
                                          (ghub--token) 'utf-8))))))))
               (url-request-method method)
               (url-request-data d))
-          (url-retrieve-synchronously (concat ghub-base-url resource p)))
+          (url-retrieve-synchronously (concat url p)))
       (set-buffer-multibyte t)
       (let (link body)
         (goto-char (point-min))
@@ -149,7 +152,7 @@ optional NOERROR is non-nil, in which case return nil."
                            (cons url-http-response-status data))))))
         (if (and link ghub-unpaginate)
             (nconc body
-                   (ghub-request method resource
+                   (ghub-request method url
                                  (cons (cons 'page link)
                                        (cl-delete 'page params :key #'car))
                                  data noerror))

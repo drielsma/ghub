@@ -91,6 +91,9 @@
 (defvar url-http-end-of-headers)
 (defvar url-http-response-status)
 
+;;; Request
+;;;; API
+
 (defvar ghub-base-url "https://api.github.com")
 (defvar ghub-authenticate t)
 (defvar ghub-token nil)
@@ -208,6 +211,23 @@ in which case return nil."
 
 (define-obsolete-function-alias 'ghub--request 'ghub-request "Ghub 2.0")
 
+(defun ghub-wait (resource)
+  "Busy-wait until RESOURCE becomes available."
+  (with-local-quit
+    (let ((for 0.5)
+          (total 0))
+      (while (not (ignore-errors (ghub-get resource)))
+        (setq for (truncate (* 2 for)))
+        (setq total (+ total for))
+        (when (= for 128)
+          (signal 'ghub-error
+                  (list (format "Github is taking too long to create %s"
+                                resource))))
+        (message "Waiting for %s (%ss)..." resource total)
+        (sit-for for)))))
+
+;;;; Internal
+
 (defun ghub--read-json-response ()
   (and (not (eobp))
        (let ((json-object-type 'alist)
@@ -228,6 +248,9 @@ in which case return nil."
                (concat (url-hexify-string (symbol-name (car param))) "="
                        (url-hexify-string (cdr param))))
              params "&"))
+
+;;; Authentication
+;;;; Internal
 
 (defun ghub--basic-auth ()
   (let ((url (url-generic-parse-url ghub-base-url)))
@@ -270,21 +293,6 @@ variable `github.HOST.user'."
             (car (process-lines "git" "config" var))
           (error
            (signal 'ghub-auth-error (list (format "%s is undefined" var))))))))
-
-(defun ghub-wait (resource)
-  "Busy-wait until RESOURCE becomes available."
-  (with-local-quit
-    (let ((for 0.5)
-          (total 0))
-      (while (not (ignore-errors (ghub-get resource)))
-        (setq for (truncate (* 2 for)))
-        (setq total (+ total for))
-        (when (= for 128)
-          (signal 'ghub-error
-                  (list (format "Github is taking too long to create %s"
-                                resource))))
-        (message "Waiting for %s (%ss)..." resource total)
-        (sit-for for)))))
 
 ;;; ghub.el ends soon
 (provide 'ghub)

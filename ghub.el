@@ -110,14 +110,9 @@ optional NOERROR is non-nil, in which case return nil."
     (with-current-buffer
         (let ((url-request-extra-headers
                `(("Content-Type"  . "application/json")
-                 ,@ghub-extra-headers
                  ,@(and ghub-authenticate
-                        `(("Authorization"
-                           . ,(if (eq ghub-authenticate 'basic)
-                                  (ghub--basic-auth)
-                                (concat "token "
-                                        (encode-coding-string
-                                         (ghub--token) 'utf-8))))))))
+                        (list (cons "Authorization" (ghub--auth ghub-authenticate))))
+                 ,@ghub-extra-headers))
               (url-request-method method)
               (url-request-data d))
           (url-retrieve-synchronously (concat url p)))
@@ -200,6 +195,14 @@ optional NOERROR is non-nil, in which case return nil."
 
 ;;; Authentication
 ;;;; Internal
+
+(defun ghub--auth (auth)
+  (encode-coding-string
+   (if (eq auth 'basic)
+       (ghub--basic-auth)
+     (concat "token "
+             (ghub--token)))
+   'utf-8))
 
 (defun ghub--basic-auth ()
   (let ((url (url-generic-parse-url ghub-base-url)))

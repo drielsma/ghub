@@ -265,10 +265,6 @@ in which case return nil."
       (signal 'ghub-auth-error '("Invalid value for ghub-base-url")))))
 
 (defun ghub--token ()
-  "Return the configured token.
-Use `auth-source-search' to get the token for the user returned
-by `ghub--username' and a host based on `ghub-base-url'.  When
-`ghub-token' is non-nil, then return its value instead."
   (or ghub-token
       (let ((secret (plist-get (car (auth-source-search
                                      :max 1
@@ -281,10 +277,6 @@ by `ghub--username' and a host based on `ghub-base-url'.  When
             (signal 'ghub-auth-error '("Token not found"))))))
 
 (defun ghub--username ()
-  "Return the configured username.
-For Github.com get the value of the Git variable `github.user'.
-For Github enterprise instances, get the value of the Git
-variable `github.HOST.user'."
   (or ghub-username
       (let ((var (if (string-equal ghub-base-url "https://api.github.com")
                      "github.user"
